@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
@@ -63,7 +62,6 @@ const ProductForm = () => {
     },
   });
   
-  // Load product data for editing
   useEffect(() => {
     const fetchProduct = async () => {
       if (isEditMode) {
@@ -177,8 +175,8 @@ const ProductForm = () => {
                     <FormLabel>Изображение товара</FormLabel>
                     <FormControl>
                       <ImageUploader
-                        value={field.value}
                         onChange={field.onChange}
+                        currentImage={field.value}
                       />
                     </FormControl>
                     <FormMessage />
