@@ -22,12 +22,15 @@ const Catalog = () => {
     const fetchProducts = async () => {
       setIsLoading(true);
       try {
+        console.log("Fetching products with filters:", filters);
         const filtered = await getFilteredProducts(
           filters.category,
           filters.subcategory || "",
           filters.priceRange,
           filters.sortBy
         );
+        
+        console.log("Products fetched:", filtered.length);
         
         if (searchQuery.trim()) {
           const query = searchQuery.toLowerCase().trim();

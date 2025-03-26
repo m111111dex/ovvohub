@@ -41,6 +41,7 @@ export const addProduct = async (product: Product): Promise<void> => {
 
   if (error) {
     console.error("Error adding product:", error);
+    throw error;
   }
 };
 
@@ -60,6 +61,7 @@ export const updateProduct = async (product: Product): Promise<void> => {
 
   if (error) {
     console.error("Error updating product:", error);
+    throw error;
   }
 };
 
@@ -72,6 +74,7 @@ export const deleteProduct = async (productId: string): Promise<void> => {
 
   if (error) {
     console.error("Error deleting product:", error);
+    throw error;
   }
 };
 
@@ -82,48 +85,57 @@ export const getFilteredProducts = async (
   priceRange: { min: number; max: number },
   sortBy: string
 ): Promise<Product[]> => {
-  let query = supabase
-    .from("products")
-    .select("*")
-    .gte("price", priceRange.min)
-    .lte("price", priceRange.max);
+  try {
+    console.log("Fetching filtered products:", { categoryFilter, priceRange, sortBy });
+    
+    let query = supabase
+      .from("products")
+      .select("*")
+      .gte("price", priceRange.min)
+      .lte("price", priceRange.max);
 
-  // Apply category filter
-  if (categoryFilter) {
-    query = query.eq("category_id", categoryFilter);
-  }
+    // Apply category filter
+    if (categoryFilter) {
+      query = query.eq("category_id", categoryFilter);
+    }
 
-  // Apply sorting
-  switch (sortBy) {
-    case "price-asc":
-      query = query.order("price", { ascending: true });
-      break;
-    case "price-desc":
-      query = query.order("price", { ascending: false });
-      break;
-    case "date-asc":
-      query = query.order("created_at", { ascending: true });
-      break;
-    case "date-desc":
-      query = query.order("created_at", { ascending: false });
-      break;
-  }
+    // Apply sorting
+    switch (sortBy) {
+      case "price-asc":
+        query = query.order("price", { ascending: true });
+        break;
+      case "price-desc":
+        query = query.order("price", { ascending: false });
+        break;
+      case "date-asc":
+        query = query.order("created_at", { ascending: true });
+        break;
+      case "date-desc":
+        query = query.order("created_at", { ascending: false });
+        break;
+    }
 
-  const { data, error } = await query;
+    console.log("Executing Supabase query...");
+    const { data, error } = await query;
 
-  if (error) {
-    console.error("Error fetching filtered products:", error);
+    if (error) {
+      console.error("Supabase query error:", error);
+      return [];
+    }
+
+    console.log("Products fetched successfully:", data.length);
+    return data.map(product => ({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      description: product.description,
+      imageUrl: product.image_url,
+      category: product.category_id,
+      dateAdded: product.created_at,
+      adminLink: product.product_link || undefined
+    }));
+  } catch (error) {
+    console.error("Unexpected error in getFilteredProducts:", error);
     return [];
   }
-
-  return data.map(product => ({
-    id: product.id,
-    name: product.name,
-    price: product.price,
-    description: product.description,
-    imageUrl: product.image_url,
-    category: product.category_id,
-    dateAdded: product.created_at,
-    adminLink: product.product_link || undefined
-  }));
 };
