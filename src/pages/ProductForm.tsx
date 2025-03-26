@@ -1,274 +1,343 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CATEGORIES, formatPrice, generateId } from "@/utils/constants";
-import { addProduct, loadProducts, updateProduct } from "@/utils/productStore";
-import { Product } from "@/types";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import AdminLayout from "@/components/AdminLayout";
-import AdminGuard from "@/components/AdminGuard";
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import ImageUploader from "@/components/ImageUploader";
-import { toast } from "sonner";
+import { CATEGORIES, generateId } from "@/utils/constants";
+import { loadProducts, addProduct, updateProduct } from "@/utils/productStore";
+import { Product } from "@/types";
+import { useToast } from "@/components/ui/use-toast";
+import { v4 as uuidv4 } from "uuid";
+
+const formSchema = z.object({
+  name: z.string().min(2, { message: "Название должно содержать не менее 2 символов" }),
+  price: z.coerce.number().min(1, { message: "Цена должна быть больше 0" }),
+  description: z.string().min(10, { message: "Описание должно содержать не менее 10 символов" }),
+  category: z.string().min(1, { message: "Выберите категорию" }),
+  subcategory: z.string().optional(),
+  imageUrl: z.string().min(1, { message: "Добавьте изображение товара" }),
+  adminLink: z.string().optional(),
+});
 
 const ProductForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
-  const [product, setProduct] = useState<Partial<Product>>({
-    name: "",
-    price: 0,
-    description: "",
-    imageUrl: "",
-    category: "",
-    subcategory: "",
-    adminLink: "",
-  });
+  const { toast } = useToast();
+  const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const isEditMode = !!id;
   
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: "",
+      price: 0,
+      description: "",
+      category: "",
+      subcategory: "",
+      imageUrl: "",
+      adminLink: "",
+    },
+  });
+  
+  // Load product data for editing
   useEffect(() => {
-    if (isEditMode) {
-      const products = loadProducts();
-      const existingProduct = products.find(p => p.id === id);
-      
-      if (existingProduct) {
-        setProduct(existingProduct);
-      } else {
-        toast.error("Товар не найден");
-        navigate("/admin/dashboard");
+    const fetchProduct = async () => {
+      if (isEditMode) {
+        setIsLoading(true);
+        try {
+          const products = await loadProducts();
+          const product = products.find(p => p.id === id);
+          
+          if (product) {
+            setCurrentProduct(product);
+            form.reset({
+              name: product.name,
+              price: product.price,
+              description: product.description,
+              category: product.category,
+              subcategory: product.subcategory || "",
+              imageUrl: product.imageUrl,
+              adminLink: product.adminLink || "",
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Ошибка",
+              description: "Товар не найден"
+            });
+            navigate("/admin/dashboard");
+          }
+        } catch (error) {
+          console.error("Error loading product:", error);
+          toast({
+            variant: "destructive",
+            title: "Ошибка загрузки",
+            description: "Не удалось загрузить данные товара"
+          });
+        } finally {
+          setIsLoading(false);
+        }
       }
-    }
-  }, [id, isEditMode, navigate]);
-  
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+    };
     
-    if (name === "price") {
-      // Remove non-numeric characters and convert to number
-      const numericValue = value.replace(/[^0-9]/g, "");
-      setProduct(prev => ({ ...prev, [name]: numericValue ? parseInt(numericValue) : 0 }));
-    } else {
-      setProduct(prev => ({ ...prev, [name]: value }));
-    }
-  };
+    fetchProduct();
+  }, [id, isEditMode, navigate, toast, form]);
   
-  const handleImageChange = (imageUrl: string) => {
-    setProduct(prev => ({ ...prev, imageUrl }));
-  };
-  
-  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const categoryId = e.target.value;
-    const category = CATEGORIES.find(c => c.id === categoryId);
-    
-    setProduct(prev => ({
-      ...prev,
-      category: category ? category.name : "",
-      subcategory: "", // Reset subcategory when category changes
-    }));
-  };
-  
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    if (!product.name || !product.price || !product.imageUrl || !product.category) {
-      toast.error("Пожалуйста, заполните все обязательные поля");
-      setLoading(false);
-      return;
-    }
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true);
     
     try {
-      if (isEditMode && id) {
-        updateProduct({
-          ...product,
-          id,
-        } as Product);
-        toast.success("Товар успешно обновлен");
+      const productData: Product = {
+        id: isEditMode ? id! : uuidv4(),
+        name: values.name,
+        price: values.price,
+        description: values.description,
+        category: values.category,
+        subcategory: values.subcategory,
+        imageUrl: values.imageUrl,
+        dateAdded: isEditMode ? currentProduct!.dateAdded : new Date().toISOString(),
+        adminLink: values.adminLink,
+      };
+      
+      if (isEditMode) {
+        await updateProduct(productData);
+        toast({
+          title: "Товар обновлен",
+          description: "Изменения успешно сохранены"
+        });
       } else {
-        const newProduct: Product = {
-          ...product,
-          id: generateId(),
-          dateAdded: new Date().toISOString(),
-        } as Product;
-        
-        addProduct(newProduct);
-        toast.success("Товар успешно добавлен");
+        await addProduct(productData);
+        toast({
+          title: "Товар добавлен",
+          description: "Новый товар успешно добавлен в каталог"
+        });
       }
       
       navigate("/admin/dashboard");
     } catch (error) {
-      toast.error("Произошла ошибка при сохранении товара");
-      console.error(error);
+      console.error("Error saving product:", error);
+      toast({
+        variant: "destructive",
+        title: "Ошибка сохранения",
+        description: "Не удалось сохранить данные товара"
+      });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
   
-  const selectedCategory = CATEGORIES.find(c => c.name === product.category);
+  const selectedCategory = form.watch("category");
+  const selectedCategoryObj = CATEGORIES.find(c => c.id === selectedCategory);
   
   return (
-    <AdminGuard>
-      <AdminLayout>
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">
-            {isEditMode ? "Редактирование товара" : "Добавление товара"}
-          </h1>
-        </div>
+    <AdminLayout>
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-6">
+          {isEditMode ? "Редактирование товара" : "Добавление товара"}
+        </h1>
         
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left column - Image */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Изображение товара*
-                </label>
-                <ImageUploader
-                  onChange={handleImageChange}
-                  currentImage={product.imageUrl}
+        {isLoading ? (
+          <div className="space-y-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-10 bg-gray-100 rounded-md animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="imageUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Изображение товара</FormLabel>
+                    <FormControl>
+                      <ImageUploader
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Название товара</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Введите название товара" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="price"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Цена (₸)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder="Введите цену" 
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
               
-              {/* Right column - Form fields */}
-              <div className="lg:col-span-2 space-y-6">
-                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                    Название товара*
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    value={product.name}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                    Цена (в тенге)*
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      id="price"
-                      name="price"
-                      value={product.price}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md"
-                      required
-                    />
-                    <span className="absolute right-3 top-2 text-gray-500">₸</span>
-                  </div>
-                  {product.price !== undefined && product.price > 0 && (
-                    <p className="mt-1 text-sm text-gray-500">
-                      {formatPrice(product.price)}
-                    </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Категория</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        defaultValue={field.value}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="rounded-lg">
+                            <SelectValue placeholder="Выберите категорию" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {CATEGORIES.map((category) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                </div>
+                />
                 
-                <div>
-                  <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
-                    Категория*
-                  </label>
-                  <select
-                    id="category"
-                    name="category"
-                    value={selectedCategory?.id || ""}
-                    onChange={handleCategoryChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    required
-                  >
-                    <option value="">Выберите категорию</option>
-                    {CATEGORIES.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                {selectedCategory?.subcategories && selectedCategory.subcategories.length > 0 && (
-                  <div>
-                    <label htmlFor="subcategory" className="block text-sm font-medium text-gray-700 mb-1">
-                      Подкатегория
-                    </label>
-                    <select
-                      id="subcategory"
-                      name="subcategory"
-                      value={product.subcategory || ""}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    >
-                      <option value="">Выберите подкатегорию</option>
-                      {selectedCategory.subcategories.map((sub) => (
-                        <option key={sub} value={sub}>
-                          {sub}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Описание*
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    value={product.description}
-                    onChange={handleChange}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="adminLink" className="block text-sm font-medium text-gray-700 mb-1">
-                    Ссылка на товар (видна только администратору)
-                  </label>
-                  <input
-                    type="url"
-                    id="adminLink"
-                    name="adminLink"
-                    value={product.adminLink || ""}
-                    onChange={handleChange}
-                    placeholder="https://example.com/product"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  />
-                </div>
-                
-                <div className="pt-4 flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => navigate("/admin/dashboard")}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                  >
-                    Отмена
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="px-4 py-2 bg-brand text-white rounded-md hover:bg-brand-dark disabled:opacity-70"
-                  >
-                    {loading ? (
-                      <div className="w-5 h-5 border-2 border-t-transparent border-white rounded-full animate-spin"></div>
-                    ) : isEditMode ? (
-                      "Сохранить изменения"
-                    ) : (
-                      "Добавить товар"
+                {selectedCategoryObj?.subcategories && (
+                  <FormField
+                    control={form.control}
+                    name="subcategory"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Подкатегория</FormLabel>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          defaultValue={field.value}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="rounded-lg">
+                              <SelectValue placeholder="Выберите подкатегорию" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {selectedCategoryObj.subcategories.map((sub) => (
+                              <SelectItem key={sub} value={sub}>
+                                {sub}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                  </button>
-                </div>
+                  />
+                )}
               </div>
-            </div>
-          </form>
-        </div>
-      </AdminLayout>
-    </AdminGuard>
+              
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Описание товара</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Введите описание товара" 
+                        className="min-h-[120px]"
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="adminLink"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ссылка на товар (видна только администратору)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Введите ссылку на товар (опционально)" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div className="flex justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-lg"
+                  onClick={() => navigate("/admin/dashboard")}
+                  disabled={isSubmitting}
+                >
+                  Отмена
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="rounded-lg"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Сохранение..." : isEditMode ? "Сохранить изменения" : "Добавить товар"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        )}
+      </div>
+    </AdminLayout>
   );
 };
 

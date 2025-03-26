@@ -1,247 +1,186 @@
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Product } from "@/types";
-import { loadProducts, deleteProduct } from "@/utils/productStore";
 import { formatPrice } from "@/utils/constants";
+import { deleteProduct, loadProducts } from "@/utils/productStore";
 import AdminLayout from "@/components/AdminLayout";
-import AdminGuard from "@/components/AdminGuard";
-import { ArrowUpDown, Edit, ExternalLink, Trash } from "lucide-react";
-import { toast } from "sonner";
-
-type SortField = "name" | "price" | "category" | "dateAdded";
-type SortDirection = "asc" | "desc";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ArrowUpDown, Edit, Plus, Trash } from "lucide-react";
+import { Product } from "@/types";
+import { useToast } from "@/components/ui/use-toast";
 
 const AdminDashboard = () => {
   const [products, setProducts] = useState<Product[]>([]);
-  const [sortField, setSortField] = useState<SortField>("dateAdded");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [searchTerm, setSearchTerm] = useState("");
-  
-  useEffect(() => {
-    const storedProducts = loadProducts();
-    sortProducts(storedProducts, sortField, sortDirection);
-  }, [sortField, sortDirection]);
-  
-  const sortProducts = (
-    productsToSort: Product[],
-    field: SortField,
-    direction: SortDirection
-  ) => {
-    const sorted = [...productsToSort].sort((a, b) => {
-      if (field === "price") {
-        return direction === "asc" ? a.price - b.price : b.price - a.price;
-      } else if (field === "dateAdded") {
-        const dateA = new Date(a.dateAdded).getTime();
-        const dateB = new Date(b.dateAdded).getTime();
-        return direction === "asc" ? dateA - dateB : dateB - dateA;
-      } else if (field === "name") {
-        return direction === "asc"
-          ? a.name.localeCompare(b.name)
-          : b.name.localeCompare(a.name);
-      } else if (field === "category") {
-        const catA = `${a.category}${a.subcategory || ""}`;
-        const catB = `${b.category}${b.subcategory || ""}`;
-        return direction === "asc"
-          ? catA.localeCompare(catB)
-          : catB.localeCompare(catA);
-      }
-      return 0;
-    });
-    
-    setProducts(sorted);
+  const [sortColumn, setSortColumn] = useState<string>("date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
+  const fetchProducts = async () => {
+    setIsLoading(true);
+    try {
+      const loadedProducts = await loadProducts();
+      setProducts(loadedProducts);
+    } catch (error) {
+      console.error("Error loading products:", error);
+      toast({
+        variant: "destructive",
+        title: "Ошибка загрузки товаров",
+        description: "Не удалось загрузить список товаров"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
-  
-  const handleSort = (field: SortField) => {
-    if (field === sortField) {
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const handleSort = (column: string) => {
+    if (column === sortColumn) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
-      setSortField(field);
+      setSortColumn(column);
       setSortDirection("asc");
     }
   };
-  
-  const handleDelete = (id: string) => {
-    if (window.confirm("Вы уверены, что хотите удалить этот товар?")) {
-      deleteProduct(id);
-      setProducts(products.filter(product => product.id !== id));
-      toast.success("Товар успешно удален");
-    }
-  };
-  
-  const filteredProducts = products.filter(product => {
-    if (!searchTerm.trim()) return true;
+
+  const sortedProducts = [...products].sort((a, b) => {
+    const modifier = sortDirection === "asc" ? 1 : -1;
     
-    const search = searchTerm.toLowerCase();
-    return (
-      product.name.toLowerCase().includes(search) ||
-      product.description.toLowerCase().includes(search) ||
-      product.category.toLowerCase().includes(search) ||
-      (product.subcategory && product.subcategory.toLowerCase().includes(search))
-    );
+    if (sortColumn === "price") {
+      return (a.price - b.price) * modifier;
+    } else if (sortColumn === "date") {
+      return (new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime()) * modifier;
+    } else if (sortColumn === "name") {
+      return a.name.localeCompare(b.name) * modifier;
+    }
+    return 0;
   });
-  
-  const getSortIcon = (field: SortField) => {
-    if (field !== sortField) {
-      return <ArrowUpDown className="h-4 w-4 opacity-50" />;
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Вы уверены, что хотите удалить этот товар?")) {
+      try {
+        await deleteProduct(id);
+        toast({
+          title: "Товар удален",
+          description: "Товар был успешно удален из каталога"
+        });
+        fetchProducts(); // Refresh products list
+      } catch (error) {
+        console.error("Error deleting product:", error);
+        toast({
+          variant: "destructive",
+          title: "Ошибка удаления",
+          description: "Не удалось удалить товар"
+        });
+      }
     }
-    
-    return sortDirection === "asc" ? (
-      <ArrowUpDown className="h-4 w-4 transform rotate-180" />
-    ) : (
-      <ArrowUpDown className="h-4 w-4" />
-    );
   };
-  
+
+  const SortableHeader = ({ column, label }: { column: string; label: string }) => (
+    <TableHead className="cursor-pointer" onClick={() => handleSort(column)}>
+      <div className="flex items-center space-x-1">
+        <span>{label}</span>
+        <ArrowUpDown 
+          className={`h-4 w-4 ${sortColumn === column ? "text-brand" : "text-gray-400"}`} 
+        />
+      </div>
+    </TableHead>
+  );
+
   return (
-    <AdminGuard>
-      <AdminLayout>
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl font-semibold text-gray-900">Список товаров</h1>
-          <Link
-            to="/admin/add-product"
-            className="px-4 py-2 bg-brand text-white rounded-md hover:bg-brand-dark transition-colors inline-flex items-center justify-center sm:w-auto w-full"
-          >
-            Добавить товар
-          </Link>
+    <AdminLayout>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-semibold">Товары</h1>
+        <Link to="/admin/add-product">
+          <Button className="rounded-lg">
+            <Plus className="mr-2 h-4 w-4" /> Добавить товар
+          </Button>
+        </Link>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[...Array(5)].map((_, index) => (
+            <div key={index} className="w-full h-12 bg-gray-100 rounded-md animate-pulse" />
+          ))}
         </div>
-        
+      ) : (
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="p-4 border-b">
-            <input
-              type="text"
-              placeholder="Поиск товаров..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-          </div>
-          
-          {filteredProducts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                      Фото
-                    </th>
-                    <th 
-                      scope="col" 
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                      onClick={() => handleSort("name")}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Название</span>
-                        {getSortIcon("name")}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[60px]">Фото</TableHead>
+                <SortableHeader column="name" label="Название" />
+                <SortableHeader column="price" label="Цена" />
+                <TableHead>Категория</TableHead>
+                <SortableHeader column="date" label="Дата" />
+                <TableHead className="text-right">Действия</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedProducts.length > 0 ? (
+                sortedProducts.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <div className="w-10 h-10 rounded-md overflow-hidden border border-gray-200">
+                        <img 
+                          src={product.imageUrl} 
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://via.placeholder.com/100?text=Нет+фото";
+                          }}
+                        />
                       </div>
-                    </th>
-                    <th 
-                      scope="col" 
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                      onClick={() => handleSort("price")}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Цена</span>
-                        {getSortIcon("price")}
+                    </TableCell>
+                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell>{formatPrice(product.price)}</TableCell>
+                    <TableCell>{product.category}</TableCell>
+                    <TableCell>
+                      {new Date(product.dateAdded).toLocaleDateString('ru-RU')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end space-x-2">
+                        <Link to={`/admin/edit-product/${product.id}`}>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-100"
+                          onClick={() => handleDelete(product.id)}
+                        >
+                          <Trash className="h-4 w-4" />
+                        </Button>
                       </div>
-                    </th>
-                    <th 
-                      scope="col" 
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                      onClick={() => handleSort("category")}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Категория</span>
-                        {getSortIcon("category")}
-                      </div>
-                    </th>
-                    <th 
-                      scope="col" 
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                      onClick={() => handleSort("dateAdded")}
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>Дата добавления</span>
-                        {getSortIcon("dateAdded")}
-                      </div>
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Действия
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredProducts.map((product) => (
-                    <tr key={product.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="h-12 w-12 rounded overflow-hidden bg-gray-100">
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = 'https://placehold.co/100x100/F0F0F0/CCCCCC?text=OVVO';
-                            }}
-                          />
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{product.name}</div>
-                        <div className="text-xs text-gray-500 truncate max-w-xs">{product.description}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-brand font-semibold">{formatPrice(product.price)}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{product.category}</div>
-                        {product.subcategory && (
-                          <div className="text-xs text-gray-500">{product.subcategory}</div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(product.dateAdded).toLocaleDateString("ru-RU")}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex items-center justify-end space-x-2">
-                          {product.adminLink && (
-                            <a
-                              href={product.adminLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-gray-400 hover:text-brand"
-                            >
-                              <ExternalLink className="h-5 w-5" />
-                            </a>
-                          )}
-                          <Link
-                            to={`/admin/edit-product/${product.id}`}
-                            className="text-indigo-600 hover:text-indigo-900"
-                          >
-                            <Edit className="h-5 w-5" />
-                          </Link>
-                          <button
-                            onClick={() => handleDelete(product.id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <Trash className="h-5 w-5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-gray-500">
-                {searchTerm ? "Товары не найдены" : "Нет товаров в каталоге"}
-              </p>
-            </div>
-          )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                    Нет добавленных товаров
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </div>
-      </AdminLayout>
-    </AdminGuard>
+      )}
+    </AdminLayout>
   );
 };
 

@@ -1,88 +1,129 @@
 
 import { Product } from "@/types";
-import { STORAGE_KEY } from "./constants";
+import { supabase } from "@/integrations/supabase/client";
 
-// Load products from localStorage
-export const loadProducts = (): Product[] => {
-  const storedProducts = localStorage.getItem(STORAGE_KEY);
-  if (storedProducts) {
-    try {
-      return JSON.parse(storedProducts);
-    } catch (error) {
-      console.error("Error parsing stored products:", error);
-      return [];
-    }
+// Load products from Supabase
+export const loadProducts = async (): Promise<Product[]> => {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error loading products:", error);
+    return [];
   }
-  return [];
+
+  return data.map(product => ({
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    description: product.description,
+    imageUrl: product.image_url,
+    category: product.category_id,
+    dateAdded: product.created_at,
+    adminLink: product.product_link || undefined
+  }));
 };
 
-// Save products to localStorage
-export const saveProducts = (products: Product[]): void => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
-};
+// Save product to Supabase
+export const addProduct = async (product: Product): Promise<void> => {
+  const { error } = await supabase.from("products").insert({
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    description: product.description,
+    image_url: product.imageUrl,
+    category_id: product.category,
+    created_at: product.dateAdded,
+    product_link: product.adminLink
+  });
 
-// Add a new product
-export const addProduct = (product: Product): void => {
-  const products = loadProducts();
-  products.push(product);
-  saveProducts(products);
+  if (error) {
+    console.error("Error adding product:", error);
+  }
 };
 
 // Update an existing product
-export const updateProduct = (product: Product): void => {
-  const products = loadProducts();
-  const index = products.findIndex(p => p.id === product.id);
-  if (index !== -1) {
-    products[index] = product;
-    saveProducts(products);
+export const updateProduct = async (product: Product): Promise<void> => {
+  const { error } = await supabase
+    .from("products")
+    .update({
+      name: product.name,
+      price: product.price,
+      description: product.description,
+      image_url: product.imageUrl,
+      category_id: product.category,
+      product_link: product.adminLink
+    })
+    .eq("id", product.id);
+
+  if (error) {
+    console.error("Error updating product:", error);
   }
 };
 
 // Delete a product
-export const deleteProduct = (productId: string): void => {
-  const products = loadProducts();
-  const filteredProducts = products.filter(p => p.id !== productId);
-  saveProducts(filteredProducts);
+export const deleteProduct = async (productId: string): Promise<void> => {
+  const { error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", productId);
+
+  if (error) {
+    console.error("Error deleting product:", error);
+  }
 };
 
 // Get products with filtering and sorting
-export const getFilteredProducts = (
+export const getFilteredProducts = async (
   categoryFilter: string,
   subcategoryFilter: string,
   priceRange: { min: number; max: number },
   sortBy: string
-): Product[] => {
-  let products = loadProducts();
+): Promise<Product[]> => {
+  let query = supabase
+    .from("products")
+    .select("*")
+    .gte("price", priceRange.min)
+    .lte("price", priceRange.max);
 
   // Apply category filter
   if (categoryFilter) {
-    products = products.filter(p => p.category === categoryFilter);
-    
-    // Apply subcategory filter if a category is selected
-    if (subcategoryFilter) {
-      products = products.filter(p => p.subcategory === subcategoryFilter);
-    }
+    query = query.eq("category_id", categoryFilter);
   }
-
-  // Apply price filter
-  products = products.filter(
-    p => p.price >= priceRange.min && p.price <= priceRange.max
-  );
 
   // Apply sorting
   switch (sortBy) {
     case "price-asc":
-      return products.sort((a, b) => a.price - b.price);
+      query = query.order("price", { ascending: true });
+      break;
     case "price-desc":
-      return products.sort((a, b) => b.price - a.price);
+      query = query.order("price", { ascending: false });
+      break;
     case "date-asc":
-      return products.sort((a, b) => 
-        new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime()
-      );
+      query = query.order("created_at", { ascending: true });
+      break;
     case "date-desc":
-    default:
-      return products.sort((a, b) => 
-        new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime()
-      );
+      query = query.order("created_at", { ascending: false });
+      break;
   }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Error fetching filtered products:", error);
+    return [];
+  }
+
+  return data.map(product => ({
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    description: product.description,
+    imageUrl: product.image_url,
+    category: product.category_id,
+    dateAdded: product.created_at,
+    adminLink: product.product_link || undefined
+  }));
 };

@@ -8,32 +8,51 @@ import PriceFilter from "@/components/PriceFilter";
 import ProductCard from "@/components/ProductCard";
 import SortSelector from "@/components/SortSelector";
 import { Filter, Search } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 const Catalog = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTER_STATE);
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
   
   useEffect(() => {
-    const filtered = getFilteredProducts(
-      filters.category,
-      filters.subcategory || "",
-      filters.priceRange,
-      filters.sortBy
-    );
+    const fetchProducts = async () => {
+      setIsLoading(true);
+      try {
+        const filtered = await getFilteredProducts(
+          filters.category,
+          filters.subcategory || "",
+          filters.priceRange,
+          filters.sortBy
+        );
+        
+        if (searchQuery.trim()) {
+          const query = searchQuery.toLowerCase().trim();
+          const searchResults = filtered.filter(product => 
+            product.name.toLowerCase().includes(query) || 
+            product.description.toLowerCase().includes(query)
+          );
+          setProducts(searchResults);
+        } else {
+          setProducts(filtered);
+        }
+      } catch (error) {
+        console.error("Error fetching products:", error);
+        toast({
+          title: "Ошибка загрузки товаров",
+          description: "Пожалуйста, попробуйте обновить страницу",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
     
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      const searchResults = filtered.filter(product => 
-        product.name.toLowerCase().includes(query) || 
-        product.description.toLowerCase().includes(query)
-      );
-      setProducts(searchResults);
-    } else {
-      setProducts(filtered);
-    }
-  }, [filters, searchQuery]);
+    fetchProducts();
+  }, [filters, searchQuery, toast]);
   
   const handleCategoryChange = (category: string) => {
     setFilters(prev => ({ ...prev, category, subcategory: "" }));
@@ -138,7 +157,20 @@ const Catalog = () => {
               </div>
             </div>
             
-            {products.length > 0 ? (
+            {isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {[...Array(8)].map((_, index) => (
+                  <div key={index} className="bg-white rounded-lg overflow-hidden shadow-sm animate-pulse">
+                    <div className="aspect-square bg-gray-200"></div>
+                    <div className="p-4 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-4 bg-gray-200 rounded w-full"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : products.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
