@@ -69,11 +69,11 @@ const Catalog = () => {
       <header className="bg-white shadow-sm py-4 px-4 md:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-semibold text-gray-900">OVVO</h1>
+            <h1 className="text-2xl font-semibold text-brand">OVVO</h1>
             <div className="flex items-center space-x-2">
               <button
                 onClick={toggleFilters}
-                className="p-2 text-gray-500 hover:text-brand md:hidden"
+                className="p-2 text-gray-500 hover:text-brand rounded-lg md:hidden"
               >
                 <Filter className="h-5 w-5" />
               </button>
@@ -109,7 +109,7 @@ const Catalog = () => {
             
             <button
               onClick={resetFilters}
-              className="w-full py-2 text-sm text-brand hover:text-brand-dark"
+              className="w-full py-2 text-sm text-brand hover:text-brand-dark rounded-lg"
             >
               Сбросить фильтры
             </button>
@@ -125,7 +125,7 @@ const Catalog = () => {
                   placeholder="Поиск товаров..."
                   value={searchQuery}
                   onChange={handleSearchChange}
-                  className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-md"
+                  className="pl-9 pr-4 py-2 w-full border border-gray-200 rounded-lg"
                 />
               </div>
               

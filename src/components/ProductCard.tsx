@@ -12,6 +12,7 @@ interface ProductCardProps {
 const ProductCard = ({ product, className }: ProductCardProps) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [showDescription, setShowDescription] = useState(false);
 
   useEffect(() => {
     const img = new Image();
@@ -23,7 +24,7 @@ const ProductCard = ({ product, className }: ProductCardProps) => {
   return (
     <div 
       className={cn(
-        "bg-white rounded-md overflow-hidden shadow-sm transition-all duration-300 card-hover animate-fade-in",
+        "bg-white rounded-lg overflow-hidden shadow-sm transition-all duration-300 card-hover animate-fade-in",
         className
       )}
     >
@@ -56,13 +57,25 @@ const ProductCard = ({ product, className }: ProductCardProps) => {
       
       <div className="p-4">
         <h3 className="font-medium text-gray-900 mb-1 truncate">{product.name}</h3>
-        <div className="flex justify-between items-center">
-          <span className="text-brand font-semibold">{formatPrice(product.price)}</span>
-          <span className="text-xs text-gray-500">
-            {product.subcategory 
-              ? `${product.category} / ${product.subcategory}`
-              : product.category}
-          </span>
+        
+        <div className="flex flex-col space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-brand font-semibold whitespace-nowrap">{formatPrice(product.price)}</span>
+            <span className="text-xs text-gray-500 truncate ml-2 text-right">
+              {product.subcategory 
+                ? `${product.category} / ${product.subcategory}`
+                : product.category}
+            </span>
+          </div>
+          
+          <p className="text-sm text-gray-600 line-clamp-2 hover:line-clamp-none cursor-pointer" 
+             onClick={() => setShowDescription(!showDescription)}>
+            {showDescription 
+              ? product.description 
+              : product.description.length > 100 
+                ? `${product.description.substring(0, 100)}...` 
+                : product.description}
+          </p>
         </div>
       </div>
     </div>
